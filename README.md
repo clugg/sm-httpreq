@@ -17,6 +17,7 @@ public void OnPluginStart()
 {
     HTTPRequest req = HTTPRequest("POST", "http://example.com/api/", "OnRequestComplete");
     req.debug = true;
+    req.headers.SetString("User-Agent", "HTTPRequests for SourceMod");
     req.params.SetString("test", "1");
     req.SendRequest();
 }
