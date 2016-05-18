@@ -5,6 +5,8 @@ Currently only supports GET and POST requests (officially, anyway), and probably
 
 The code is not nice to look at, so I would recommend you didn't. Furthermore, due to my limited understanding of SourcePawn, by default you may only have 15 requests active at any one time. A request is considered inactive once the socket disconnects. This limit can be *changed* by modifying `httpreq.inc`'s defined value for the `MAX_ACTIVE_REQUESTS` constant. However, it cannot be removed.
 
+Thanks to f0oster for helping with some concepts.
+
 ## Requirements
 * SourceMod 1.7+
 * [Socket 3.0.1](https://forums.alliedmods.net/showthread.php?t=67640)
