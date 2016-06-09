@@ -22,7 +22,7 @@ public void OnPluginStart()
     req.SendRequest();
 }
 
-public void OnRequestComplete(bool bSuccess, int iStatusCode, StringMap tHeaders, const char[] sBody, int iErrorType, int iErrorNum)
+public void OnRequestComplete(bool bSuccess, int iStatusCode, StringMap tHeaders, const char[] sBody, int iErrorType, int iErrorNum, any data)
 {
     if (bSuccess) {
         PrintToServer("finished request with status code %d", iStatusCode);

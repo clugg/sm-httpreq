@@ -6,7 +6,7 @@
 #include <socket>
 
 #define MAX_ACTIVE_REQUESTS 15
-#define MAX_URL_LENGTH 2048
+#define MAX_URL_LENGTH 2084
 #define MAX_BODY_SIZE 8192
 
 Handle    g_hSockets[MAX_ACTIVE_REQUESTS];
@@ -19,10 +19,11 @@ bool      g_bConnecting[MAX_ACTIVE_REQUESTS];
 bool      g_bConnected[MAX_ACTIVE_REQUESTS];
 bool      g_bReady[MAX_ACTIVE_REQUESTS];
 bool      g_bDebug[MAX_ACTIVE_REQUESTS];
+any       g_aData[MAX_ACTIVE_REQUESTS];
 
 methodmap HTTPRequest
 {
-    public HTTPRequest(const char[] method, const char[] sURL, const char[] sResponseCallback)
+    public HTTPRequest(const char[] method, const char[] sURL, const char[] sResponseCallback, any data=0)
     {
         for (int i = 0; i < MAX_ACTIVE_REQUESTS; ++i) {
             if (g_hSockets[i] == null) {
@@ -43,13 +44,14 @@ methodmap HTTPRequest
                 g_bConnected[i] = false;
                 g_bReady[i] = false;
                 g_bDebug[i] = false;
+                g_aData[i] = data;
 
                 return view_as<HTTPRequest>(i);
             }
         }
 
         PrintToServer("httpreq::HTTPRequest could not be created, max active requests (%d) reached", MAX_ACTIVE_REQUESTS);
-        return false;
+        return view_as<HTTPRequest>(0);
     }
 
     property int index 
@@ -216,12 +218,13 @@ public int HTTPRequest_OnError(Handle socket, const int errorType, const int err
 
     // callback
     Call_StartFunction(INVALID_HANDLE, GetFunctionByName(INVALID_HANDLE, g_sResponseCallback[arg]));
-    Call_PushCell(false); // bSuccess
-    Call_PushCell(-1); // iStatusCode
-    Call_PushCell(INVALID_HANDLE); // tHeaders
-    Call_PushString(""); // sBody
-    Call_PushCell(errorType); // iErrorType
-    Call_PushCell(errorNum); // iErrorNum
+    Call_PushCell(false); // bool bSuccess
+    Call_PushCell(-1); // int iStatusCode
+    Call_PushCell(INVALID_HANDLE); // StringMap tHeaders
+    Call_PushString(""); // const char[] sBody
+    Call_PushCell(errorType); // int iErrorType
+    Call_PushCell(errorNum); // int iErrorNum
+    Call_PushCell(g_aData[arg]); // any data
     Call_Finish();
 
     // cleanup
@@ -281,12 +284,13 @@ public int HTTPRequest_OnReceive(Handle socket, const char[] receiveData, const 
 
     // callback
     Call_StartFunction(INVALID_HANDLE, GetFunctionByName(INVALID_HANDLE, g_sResponseCallback[arg]));
-    Call_PushCell(true); // bSuccess
-    Call_PushCell(iStatusCode); // iStatusCode
-    Call_PushCell(tResponseHeaders); // tHeaders
-    Call_PushString(sResponseParts[1]); // sBody
-    Call_PushCell(0); // iErrorType
-    Call_PushCell(0); // iErrorNum
+    Call_PushCell(true); // bool bSuccess
+    Call_PushCell(iStatusCode); // int iStatusCode
+    Call_PushCell(tResponseHeaders); // StringMap tHeaders
+    Call_PushString(sResponseParts[1]); // const char[] sBody
+    Call_PushCell(0); // int iErrorType
+    Call_PushCell(0); // int iErrorNum
+    Call_PushCell(g_aData[arg]); // any data
 
     return Call_Finish();
 }
