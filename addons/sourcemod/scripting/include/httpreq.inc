@@ -86,6 +86,45 @@ methodmap HTTPRequest
         }
     }
 
+        property bool connecting
+    {
+        public get()
+        {
+            return g_bConnecting[this.index];
+        }
+
+        public set(bool value)
+        {
+            g_bConnecting[this.index] = value;
+        }
+    }
+
+    property bool connected
+    {
+        public get()
+        {
+            return g_bConnected[this.index];
+        }
+
+        public set(bool value)
+        {
+            g_bConnected[this.index] = value;
+        }
+    }
+
+    property bool ready
+    {
+        public get()
+        {
+            return g_bReady[this.index];
+        }
+
+        public set(bool value)
+        {
+            g_bReady[this.index] = value;
+        }
+    }
+
     property bool debug
     {
         public get()
@@ -99,9 +138,22 @@ methodmap HTTPRequest
         }
     }
 
+    property any data
+    {
+        public get()
+        {
+            return g_aData[this.index];
+        }
+
+        public set(any value)
+        {
+            g_aData[this.index] = value;
+        }
+    }
+
     public void Connect()
     {
-        g_bConnecting[this.index] = true;
+        this.connecting = true;
         char sFullHost[1][MAX_URL_LENGTH];
         ExplodeString(g_sURL[this.index], "/", sFullHost, sizeof(sFullHost), sizeof(sFullHost[]), false);
 
@@ -127,9 +179,9 @@ methodmap HTTPRequest
 
     public bool SendRequest()
     {
-        if (!g_bConnected[this.index]) { // not ready to request yet
-            g_bReady[this.index] = true; // request as soon as connected
-            if (!g_bConnecting[this.index]) {
+        if (!this.connected) { // not ready to request yet
+            this.ready = true; // request as soon as connected
+            if (!this.connecting) {
                 this.Connect(); // auto connect if not already trying to
             }
             return false;
@@ -224,7 +276,7 @@ public int HTTPRequest_OnError(Handle socket, const int errorType, const int err
     Call_PushString(""); // const char[] sBody
     Call_PushCell(errorType); // int iErrorType
     Call_PushCell(errorNum); // int iErrorNum
-    Call_PushCell(g_aData[arg]); // any data
+    Call_PushCell(req.data); // any data
     Call_Finish();
 
     // cleanup
@@ -238,8 +290,8 @@ public int HTTPRequest_OnConnect(Handle socket, any arg)
         PrintToServer("httpreq::HTTPRequest %d socket connected", arg);
     }
 
-    g_bConnected[arg] = true;
-    if (g_bReady[arg]) {
+    req.connected = true;
+    if (req.ready) {
         req.SendRequest();
     }
 }
@@ -290,7 +342,7 @@ public int HTTPRequest_OnReceive(Handle socket, const char[] receiveData, const 
     Call_PushString(sResponseParts[1]); // const char[] sBody
     Call_PushCell(0); // int iErrorType
     Call_PushCell(0); // int iErrorNum
-    Call_PushCell(g_aData[arg]); // any data
+    Call_PushCell(req.data); // any data
 
     return Call_Finish();
 }
@@ -304,13 +356,13 @@ public int HTTPRequest_OnDisconnect(Handle socket, any arg)
 
     CloseHandle(socket);
     g_hSockets[arg] = null;
-    g_tHeaders[arg].Clear();
-    g_tParams[arg].Clear();
+    req.headers.Clear();
+    req.params.Clear();
     strcopy(g_sMethod[arg], sizeof(g_sMethod[]), "");
     strcopy(g_sURL[arg], sizeof(g_sURL[]), "");
     strcopy(g_sResponseCallback[arg], sizeof(g_sResponseCallback[]), "");
-    g_bConnecting[arg] = false;
-    g_bConnected[arg] = false;
-    g_bReady[arg] = false;
-    g_bDebug[arg] = false;
+    req.connecting = false;
+    req.connected = false;
+    req.ready = false;
+    req.debug = false;
 }
