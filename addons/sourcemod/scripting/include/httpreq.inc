@@ -86,7 +86,7 @@ methodmap HTTPRequest
         }
     }
 
-        property bool connecting
+    property bool connecting
     {
         public get()
         {
@@ -357,7 +357,9 @@ public int HTTPRequest_OnDisconnect(Handle socket, any arg)
     CloseHandle(socket);
     g_hSockets[arg] = null;
     req.headers.Clear();
+    CloseHandle(req.headers);
     req.params.Clear();
+    CloseHandle(req.params);
     strcopy(g_sMethod[arg], sizeof(g_sMethod[]), "");
     strcopy(g_sURL[arg], sizeof(g_sURL[]), "");
     strcopy(g_sResponseCallback[arg], sizeof(g_sResponseCallback[]), "");
