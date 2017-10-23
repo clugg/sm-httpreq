@@ -230,7 +230,7 @@ methodmap HTTPRequest
         // add content headers if POST
         if (!StrEqual(g_sMethod[this.index], "GET", false)) {
             char sQuerySize[128];
-            IntToString(strlen(sQueryString), sQuerySize, sizeof(sQuerySize))
+            IntToString(strlen(sQueryString), sQuerySize, sizeof(sQuerySize));
 
             this.headers.SetString("Content-Type", "application/x-www-form-urlencoded");
             this.headers.SetString("Content-Length", sQuerySize);
@@ -319,7 +319,7 @@ public int HTTPRequest_OnReceive(Handle socket, const char[] receiveData, const 
     for (int i = 0; i < strlen(sResponseParts[0]); ++i) {
         if (sResponseParts[0][i] == '\r' && sResponseParts[0][i + 1] == '\n') {
             iHeaderAmount++;
-            ++i
+            ++i;
         }
     }
 
