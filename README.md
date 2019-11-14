@@ -1,45 +1,64 @@
 # sm-httpreq
-Provides the ability to make simple HTTP requests via the socket extension in SourcePawn.
 
-Currently only supports GET and POST requests (officially, anyway), and probably doesn't follow the HTTP/1.1 specifications as closely as it should, but it seems to work with the limited testing I've done so far.
+**I would not recommend this for use in production. It does not support HTTPS and is therefore not secure. I consider this more of a learning/informative project. If you are a looking for a more fully featured HTTP requests library, I would recommend [SteamWorks](https://forums.alliedmods.net/showthread.php?t=229556).**
 
-The code is not nice to look at, so I would recommend you didn't. Furthermore, due to my limited understanding of SourcePawn, by default you may only have 15 requests active at any one time. A request is considered inactive once the socket disconnects. This limit can be *changed* by modifying `httpreq.inc`'s defined value for the `MAX_ACTIVE_REQUESTS` constant. However, it cannot be removed.
+Provides the ability to make simple HTTP requests via the Socket extension in SourcePawn.
+
+Crafts and sends basic HTTP requests, with support for setting headers and parameters. Parameters are first crafted into a query string (no URL escaping is performed), then either appended to the URI when using GET, or placed in the request body (with `Content-Type: application/x-www-form-urlencoded` and `Content-Length` headers automatically added) otherwise. This library does not fully support HTTP/1.1 specifications.
 
 Thanks to f0oster for helping with some concepts.
 
 ## Requirements
-* SourceMod 1.7+
-* [Socket 3.0.1](https://forums.alliedmods.net/showthread.php?t=67640)
+* SourceMod 1.7 or later
+* [Socket 3.0.1](https://forums.alliedmods.net/showthread.php?t=67640) - a transitional syntax version of the include can be found [here](https://github.com/nefarius/sm-ext-socket/blob/master/socket.inc)
 
 ## Example Usage
 ```c++
+#include <httpreq>
+
 public void OnPluginStart()
 {
-    HTTPRequest req = HTTPRequest("POST", "http://example.com/api/", "OnRequestComplete");
+    HTTPRequest req = new HTTPRequest("GET", "http://example.com/api", OnRequestComplete);
     req.debug = true;
-    req.headers.SetString("User-Agent", "HTTPRequests for SourceMod");
-    req.params.SetString("test", "1");
+    req.headers.SetString("User-Agent", "sm-httpreq by clugg");
+    req.params.SetString("test", "param");
     req.SendRequest();
 }
 
-public void OnRequestComplete(bool bSuccess, int iStatusCode, StringMap tHeaders, const char[] sBody, int iErrorType, int iErrorNum, any data)
+void OnRequestComplete(HTTPRequest req, bool success, int statusCode, FancyStringMap headers, const char[] body, int errorType, int errorNum, any data)
 {
-    if (bSuccess) {
-        PrintToServer("finished request with status code %d", iStatusCode);
-
+    if (success) {
+        PrintToServer("finished request with status code %d", statusCode);
         PrintToServer("headers:");
 
-        char sKey[128], sValue[512];
-        StringMapSnapshot tHeadersSnapshot = tHeaders.Snapshot();
-        for (int i = 0; i < tHeadersSnapshot.Length; ++i) {
-            tHeadersSnapshot.GetKey(i, sKey, sizeof(sKey));
-            tHeaders.GetString(sKey, sValue, sizeof(sValue));
-            PrintToServer("%s => %s", sKey, sValue);
-        }
+        StringMapSnapshot snap = headers.Snapshot();
+        for (int i = 0, keyLength = 0, valueLength = 0; i < snap.Length; ++i) {
+            // get header name
+            keyLength = snap.KeyBufferSize(i);
+            char[] key = new char[keyLength];
+            snap.GetKey(i, key, keyLength);
 
-        PrintToServer("response: %s", sBody);
+            if (headers.IsBufferKey(key)) {
+                continue;
+            }
+
+            // get header value
+            valueLength = headers.StringBufferSize(key);
+            char[] value = new char[valueLength];
+            headers.GetString(key, value, valueLength);
+
+            // output header
+            PrintToServer("%s: %s", key, value);
+        }
+        delete snap;
+
+        PrintToServer("response: %s", body);
     } else {
-        PrintToServer("failed request with error type %d, error num %d", iErrorType, iErrorNum);
+        PrintToServer("request failed with error type %d, error num %d", errorType, errorNum);
     }
+
+    req.Cleanup();
+    delete req;
+    delete headers;
 }
 ```

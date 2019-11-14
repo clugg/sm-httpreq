@@ -5,84 +5,89 @@
 
 #include <socket>
 
-#define MAX_ACTIVE_REQUESTS 15
-#define MAX_URL_LENGTH 2084
 #define MAX_BODY_SIZE 8192
 
-Handle    g_hSockets[MAX_ACTIVE_REQUESTS];
-StringMap g_tHeaders[MAX_ACTIVE_REQUESTS];
-StringMap g_tParams[MAX_ACTIVE_REQUESTS];
-char      g_sMethod[MAX_ACTIVE_REQUESTS][6];
-char      g_sURL[MAX_ACTIVE_REQUESTS][MAX_URL_LENGTH];
-char      g_sResponseCallback[MAX_ACTIVE_REQUESTS][32];
-bool      g_bConnecting[MAX_ACTIVE_REQUESTS];
-bool      g_bConnected[MAX_ACTIVE_REQUESTS];
-bool      g_bReady[MAX_ACTIVE_REQUESTS];
-bool      g_bDebug[MAX_ACTIVE_REQUESTS];
-any       g_aData[MAX_ACTIVE_REQUESTS];
-
-methodmap HTTPRequest
+methodmap FancyStringMap < StringMap
 {
-    public HTTPRequest(const char[] method, const char[] sURL, const char[] sResponseCallback, any data=0)
+    public FancyStringMap() {
+        return view_as<FancyStringMap>(CreateTrie());
+    }
+
+    public bool SetString(const char[] key, const char[] value, bool replace = true)
     {
-        for (int i = 0; i < MAX_ACTIVE_REQUESTS; ++i) {
-            if (g_hSockets[i] == null) {
-                g_hSockets[i] = SocketCreate(SOCKET_TCP, HTTPRequest_OnError);
-                SocketSetArg(g_hSockets[i], i);
+        int metaKeyLength = strlen(key) + 8;
+        char[] metaKey = new char[metaKeyLength];
+        Format(metaKey, metaKeyLength, "%s:buffer", key);
 
-                g_tHeaders[i] = CreateTrie();
-                g_tParams[i] = CreateTrie();
+        StringMap self = view_as<StringMap>(this);
 
-                strcopy(g_sMethod[i], sizeof(g_sMethod[]), method);
-
-                // hope it's http but ignore protocol regardless
-                char sURLParts[2][MAX_URL_LENGTH];
-                g_sURL[i] = (ExplodeString(sURL, "://", sURLParts, sizeof(sURLParts), sizeof(sURLParts[]), true) == 2) ? sURLParts[1] : sURLParts[0];
-
-                strcopy(g_sResponseCallback[i], sizeof(g_sResponseCallback[]), sResponseCallback);
-                g_bConnecting[i] = false;
-                g_bConnected[i] = false;
-                g_bReady[i] = false;
-                g_bDebug[i] = false;
-                g_aData[i] = data;
-
-                return view_as<HTTPRequest>(i);
-            }
-        }
-
-        PrintToServer("httpreq::HTTPRequest could not be created, max active requests (%d) reached", MAX_ACTIVE_REQUESTS);
-        return view_as<HTTPRequest>(0);
+        return self.SetString(key, value, replace)
+            && self.SetValue(metaKey, strlen(value) + 1, replace);
     }
 
-    property int index 
-    { 
-        public get()
-        {
-            return view_as<int>(this);
-        }
+    public bool Remove(const char[] key)
+    {
+        int metaKeyLength = strlen(key) + 8;
+        char[] metaKey = new char[metaKeyLength];
+        Format(metaKey, metaKeyLength, "%s:buffer", key);
+
+        StringMap self = view_as<StringMap>(this);
+        self.Remove(metaKey);
+
+        return self.Remove(key);
     }
+
+    public bool IsBufferKey(const char[] key)
+    {
+        int length = strlen(key);
+        if (length < 7) {
+            return false;
+        }
+
+        return StrEqual(key[length - 7], ":buffer", false);
+    }
+
+    public int StringBufferSize(const char[] key)
+    {
+        int metaKeyLength = strlen(key) + 8;
+        char[] metaKey = new char[metaKeyLength];
+        Format(metaKey, metaKeyLength, "%s:buffer", key);
+
+        int value;
+        return this.GetValue(metaKey, value) ? value : -1;
+    }
+}
+
+typedef HTTPRequestFinished = function void(HTTPRequest req, bool success, int statusCode, FancyStringMap headers, const char[] body, int errorType, int errorNum, any data);
+
+methodmap HTTPRequest < FancyStringMap
+{
+    /** @section Properties **/
 
     property Handle socket
     {
         public get()
         {
-            return g_hSockets[this.index];
+            Handle value;
+            return this.GetValue("socket", value) ? value : null;
         }
     }
 
-    property StringMap headers
+    property FancyStringMap headers
     {
         public get()
         {
-            return g_tHeaders[this.index];
+            FancyStringMap value;
+            return this.GetValue("headers", value) ? value : null;
         }
     }
 
-    property StringMap params
+    property FancyStringMap params
     {
         public get()
         {
-            return g_tParams[this.index];
+            FancyStringMap value;
+            return this.GetValue("params", value) ? value : null;
         }
     }
 
@@ -90,12 +95,8 @@ methodmap HTTPRequest
     {
         public get()
         {
-            return g_bConnecting[this.index];
-        }
-
-        public set(bool value)
-        {
-            g_bConnecting[this.index] = value;
+            bool value;
+            return this.GetValue("connecting", value) ? value : false;
         }
     }
 
@@ -103,12 +104,16 @@ methodmap HTTPRequest
     {
         public get()
         {
-            return g_bConnected[this.index];
+            bool value;
+            return this.GetValue("connected", value) ? value : false;
         }
+    }
 
-        public set(bool value)
-        {
-            g_bConnected[this.index] = value;
+    property DataPack callbacks
+    {
+        public get() {
+            DataPack value;
+            return this.GetValue("callbacks", value) ? value : null;
         }
     }
 
@@ -116,12 +121,8 @@ methodmap HTTPRequest
     {
         public get()
         {
-            return g_bReady[this.index];
-        }
-
-        public set(bool value)
-        {
-            g_bReady[this.index] = value;
+            bool value;
+            return this.GetValue("ready", value) ? value : false;
         }
     }
 
@@ -129,12 +130,13 @@ methodmap HTTPRequest
     {
         public get()
         {
-            return g_bDebug[this.index];
+            bool value;
+            return this.GetValue("debug", value) ? value : false;
         }
 
         public set(bool value)
         {
-            g_bDebug[this.index] = value;
+            this.SetValue("debug", value);
         }
     }
 
@@ -142,122 +144,316 @@ methodmap HTTPRequest
     {
         public get()
         {
-            return g_aData[this.index];
+            any value;
+            return this.GetValue("data", value) ? value : -1;
         }
 
         public set(any value)
         {
-            g_aData[this.index] = value;
+            this.SetValue("data", value);
         }
     }
 
+    /** @section Methods **/
+
     public void Connect()
     {
-        this.connecting = true;
-        char sFullHost[1][MAX_URL_LENGTH];
-        ExplodeString(g_sURL[this.index], "/", sFullHost, sizeof(sFullHost), sizeof(sFullHost[]), false);
+        this.SetValue("connecting", true);
 
-        char sHostParts[2][MAX_URL_LENGTH];
-        if (ExplodeString(sFullHost[0], ":", sHostParts, sizeof(sHostParts), sizeof(sHostParts[]), false) != 2) {
-            strcopy(sHostParts[1], sizeof(sHostParts[]), "80");
+        int urlLength = this.StringBufferSize("url");
+        char[] url = new char[urlLength];
+        this.GetString("url", url, urlLength);
+
+        // determine full host from URL
+        char[][] fullHost = new char[1][urlLength];
+        ExplodeString(url, "/", fullHost, 1, urlLength, false);
+
+        // split host from port
+        char[][] hostParts = new char[2][urlLength];
+        if (ExplodeString(fullHost[0], ":", hostParts, 2, urlLength, false) != 2) {
+            strcopy(hostParts[1], urlLength, "80");
         }
 
-        char sHost[MAX_URL_LENGTH];
-        strcopy(sHost, sizeof(sHost), sHostParts[0]);
+        int hostLength = strlen(hostParts[0]) + 1;
+        char[] host = new char[hostLength];
+        strcopy(host, hostLength, hostParts[0]);
 
-        int iPort = StringToInt(sHostParts[1]);
-        if (iPort <= 0) {
-            iPort = 80;
+        int port = StringToInt(hostParts[1]);
+        if (port <= 0 || port > 65535) {
+            LogError("httpreq::HTTPRequest attempted with invalid port %d", port);
         }
 
         if (this.debug) {
             LogMessage("httpreq::HTTPRequest socket connecting to %s:%d", host, port);
         }
 
-        SocketConnect(this.socket, HTTPRequest_OnConnect, HTTPRequest_OnReceive, HTTPRequest_OnDisconnect, sHost, iPort);
+        SocketConnect(this.socket, HTTPRequest_OnConnect, HTTPRequest_OnReceive, HTTPRequest_OnDisconnect, host, port);
     }
 
     public bool SendRequest()
     {
-        if (!this.connected) { // not ready to request yet
-            this.ready = true; // request as soon as connected
-            if (!this.connecting) {
-                this.Connect(); // auto connect if not already trying to
+        // if we're not connected/ready to send a request yet
+        if (! this.connected) {
+            // note that we are ready to SendRequest as soon as connected
+            this.SetValue("ready", true);
+
+            // if we're not already connecting, connect
+            if (! this.connecting) {
+                this.Connect();
             }
+
             return false;
         }
 
-        // split URL between host and path
-        char sURLParts[2][MAX_URL_LENGTH];
-        ExplodeString(g_sURL[this.index], "/", sURLParts, sizeof(sURLParts), sizeof(sURLParts[]), true);
-        
-        char sHost[MAX_URL_LENGTH], sPath[MAX_URL_LENGTH];
-        strcopy(sHost, sizeof(sHost), sURLParts[0]);
-        strcopy(sPath, sizeof(sPath), "/");
-        StrCat(sPath, sizeof(sPath), sURLParts[1]);
+        // get HTTP method and determine whether we're using GET
+        int methodLength = this.StringBufferSize("method");
+        char[] method = new char[methodLength];
+        this.GetString("method", method, methodLength);
+        bool bIsGET = StrEqual(method, "GET", false);
 
-        // use this for tmp string storage
-        char sBuilder[MAX_BODY_SIZE], sKey[MAX_BODY_SIZE], sValue[MAX_BODY_SIZE];
+        int urlLength = this.StringBufferSize("url");
+        char[] url = new char[urlLength];
+        this.GetString("url", url, urlLength);
+
+        // split URL between host and path
+        char[][] urlParts = new char[2][urlLength];
+        if (ExplodeString(url, "/", urlParts, 2, urlLength, false)) {
+            strcopy(urlParts[1], urlLength, "");
+        }
+
+        int hostLength = strlen(urlParts[0]) + 1;
+        char[] host = new char[hostLength];
+        strcopy(host, hostLength, urlParts[0]);
+
+        int pathLength = strlen(urlParts[0]) + 2;
+        char[] path = new char[pathLength];
+        Format(path, pathLength, "/%s", urlParts[1]);
+
+        // calculate query string length
+        StringMapSnapshot snap = this.params.Snapshot();
+        int queryLength = 1;
+        int paramCount = 0;
+        for (int i = 0, keyLength = 0, valueLength = 0; i < snap.Length; ++i) {
+            // get key
+            keyLength = snap.KeyBufferSize(i);
+            char[] key = new char[keyLength];
+            snap.GetKey(i, key, keyLength);
+
+            if (this.params.IsBufferKey(key)) {
+                continue;
+            }
+
+            // get value length
+            valueLength = this.params.StringBufferSize(key);
+
+            // +1 for & for all except first param
+            if (paramCount != 0) {
+                queryLength += 1;
+            }
+
+            // calculate length for key=value, -1 to remove NULL padding
+            queryLength += keyLength + valueLength - 1;
+
+            ++paramCount;
+        }
 
         // build query string
-        char sQueryString[MAX_BODY_SIZE];
-        StringMapSnapshot tParamsSnapshot = this.params.Snapshot();
-        for (int i = 0; i < tParamsSnapshot.Length; ++i) {
-            tParamsSnapshot.GetKey(i, sKey, sizeof(sKey));
-            this.params.GetString(sKey, sValue, sizeof(sValue));
-            Format(sBuilder, sizeof(sBuilder), "%s=%s", sKey, sValue);
-            if (i + 1 < tParamsSnapshot.Length) { // append & for all except final param
-                StrCat(sBuilder, sizeof(sBuilder), "&");
+        char[] query = new char[queryLength];
+        for (int i = 0, count = 0, keyLength = 0, valueLength = 0; i < snap.Length; ++i) {
+            // get key
+            keyLength = snap.KeyBufferSize(i);
+            char[] key = new char[keyLength];
+            snap.GetKey(i, key, keyLength);
+
+            if (this.params.IsBufferKey(key)) {
+                continue;
             }
-            StrCat(sQueryString, sizeof(sQueryString), sBuilder);
+
+            // get value
+            valueLength = this.params.StringBufferSize(key);
+            char[] value = new char[valueLength];
+            this.params.GetString(key, value, valueLength);
+
+            // prepend & for all except first param
+            if (count != 0) {
+                StrCat(query, queryLength, "&");
+            }
+
+            // format param as key=value
+            StrCat(query, queryLength, key);
+            StrCat(query, queryLength, "=");
+            StrCat(query, queryLength, value);
+
+            ++count;
         }
 
-        // add query string to path if GET
-        if (StrEqual(g_sMethod[this.index], "GET", false) && tParamsSnapshot.Length > 0) {
-            if (StrContains(g_sMethod[this.index], "?") == -1) {
-                StrCat(sPath, sizeof(sPath), "?");
-            } else {
-                StrCat(sPath, sizeof(sPath), "&");
-            }
-            StrCat(sPath, sizeof(sPath), sQueryString);
+        // clean up snapshot
+        delete snap;
+
+        // calculate full path length (including query string for GET)
+        bool pathHasQueryString = bIsGET && paramCount > 0;
+        int fullPathLength = strlen(path) + 1;
+        if (pathHasQueryString) {
+            // +1 for ? or &
+            fullPathLength += queryLength + 1;
         }
 
-        // build base HTTP request
-        char sRequest[MAX_BODY_SIZE];
-        Format(sBuilder, sizeof(sBuilder), "%s %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n", g_sMethod[this.index], sPath, sHost);
-        StrCat(sRequest, sizeof(sRequest), sBuilder);
+        // build full path
+        char[] fullPath = new char[fullPathLength];
+        strcopy(fullPath, fullPathLength, path);
+        if (pathHasQueryString) {
+            StrCat(fullPath, fullPathLength, StrContains(fullPath, "?") == -1 ? "?" : "&");
+            StrCat(fullPath, fullPathLength, query);
+        }
 
-        // add content headers if POST
-        if (!StrEqual(g_sMethod[this.index], "GET", false)) {
-            char sQuerySize[128];
-            IntToString(strlen(sQueryString), sQuerySize, sizeof(sQuerySize));
+        // add basic headers
+        this.headers.SetString("Host", host);
+        this.headers.SetString("Connection", "close");
+
+        // add content headers if not using GET
+        if (! bIsGET) {
+            char contentLength[8];
+            IntToString(queryLength, contentLength, sizeof(contentLength));
 
             this.headers.SetString("Content-Type", "application/x-www-form-urlencoded");
-            this.headers.SetString("Content-Length", sQuerySize);
+            this.headers.SetString("Content-Length", contentLength);
         }
 
-        // send out headers
-        StringMapSnapshot tHeaderSnapshot = this.headers.Snapshot();
-        for (int i = 0; i < tHeaderSnapshot.Length; ++i) {
-            tHeaderSnapshot.GetKey(i, sKey, sizeof(sKey));
-            this.headers.GetString(sKey, sValue, sizeof(sValue));
-            Format(sBuilder, sizeof(sBuilder), "%s: %s\r\n", sKey, sValue);
-            StrCat(sRequest, sizeof(sRequest), sBuilder);
-        }
-        StrCat(sRequest, sizeof(sRequest), "\r\n");
+        // calculate header length
+        snap = this.headers.Snapshot();
+        int headersLength = 1;
+        for (int i = 0, keyLength = 0, valueLength = 0; i < snap.Length; ++i) {
+            // get key
+            keyLength = snap.KeyBufferSize(i);
+            char[] key = new char[keyLength];
+            snap.GetKey(i, key, keyLength);
 
-        // add query string to body if not GET
-        if (!StrEqual(g_sMethod[this.index], "GET", false)) {
-            StrCat(sRequest, sizeof(sRequest), sQueryString);
+            if (this.headers.IsBufferKey(key)) {
+                continue;
+            }
+
+            // get value length
+            valueLength = this.headers.StringBufferSize(key);
+
+            // calculate length for key: value\r\n
+            headersLength += keyLength + valueLength + 2;
         }
-        StrCat(sRequest, sizeof(sRequest), "\r\n");
+
+        // build headers
+        char[] headers = new char[headersLength];
+        for (int i = 0, keyLength = 0, valueLength = 0; i < snap.Length; ++i) {
+            // get key
+            keyLength = snap.KeyBufferSize(i);
+            char[] key = new char[keyLength];
+            snap.GetKey(i, key, keyLength);
+
+            if (this.headers.IsBufferKey(key)) {
+                continue;
+            }
+
+            // get value
+            valueLength = this.headers.StringBufferSize(key);
+            char[] value = new char[valueLength];
+            this.headers.GetString(key, value, valueLength);
+
+            // format header as Name: Value
+            StrCat(headers, headersLength, key);
+            StrCat(headers, headersLength, ": ");
+            StrCat(headers, headersLength, value);
+            StrCat(headers, headersLength, "\r\n");
+        }
+
+        // clean up snapshot
+        delete snap;
+
+        // calculate request length for {method} {fullPath} HTTP/1.1\r\n{headers}\r\n
+        int requestLength = methodLength + 1 + fullPathLength + 11 + headersLength + 2;
+        if (! bIsGET) {
+            requestLength += queryLength + 2;
+        }
+
+        // build request
+        char[] request = new char[requestLength];
+        Format(request, requestLength, "%s %s HTTP/1.1\r\n", method, fullPath);
+        StrCat(request, requestLength, headers);
+        StrCat(request, requestLength, "\r\n");
+        // add query to body if not using GET
+        if (! bIsGET) {
+            StrCat(request, requestLength, query);
+            StrCat(request, requestLength, "\r\n");
+        }
 
         if (this.debug) {
             LogMessage("httpreq::HTTPRequest socket making request:\n%s", request);
         }
 
-        SocketSend(this.socket, sRequest);
+        SocketSend(this.socket, request);
+
         return true;
+    }
+
+    /** @section Constructor/Destructor **/
+
+    public HTTPRequest(const char[] method, const char[] url, HTTPRequestFinished callback, any data = 0)
+    {
+        HTTPRequest self = view_as<HTTPRequest>(new FancyStringMap());
+
+        Handle socket = SocketCreate(SOCKET_TCP, HTTPRequest_OnError);
+        SocketSetArg(socket, self);
+        self.SetValue("socket", socket);
+
+        self.SetValue("headers", new FancyStringMap());
+        self.SetValue("params", new FancyStringMap());
+        self.SetString("method", method);
+        self.SetValue("connecting", false);
+        self.SetValue("connected", false);
+        self.SetValue("ready", false);
+
+        self.debug = false;
+        self.data = data;
+
+        // prepare pack to store callback
+        DataPack callbacks = new DataPack();
+        callbacks.WriteFunction(callback);
+        self.SetValue("callbacks", callbacks);
+
+        // split protocol from URL
+        int urlLength = strlen(url) + 1;
+        char[][] urlParts = new char[2][urlLength];
+        if (ExplodeString(url, "://", urlParts, 2, urlLength, true) == 2) {
+            if (! StrEqual(urlParts[0], "http")) {
+                LogError("httpreq::HTTPRequest attempted with invalid protocol '%s'", urlParts[0]);
+            }
+
+            self.SetString("url", urlParts[1]);
+        } else {
+            self.SetString("url", urlParts[0]);
+        }
+
+        return self;
+    }
+
+    public void Cleanup()
+    {
+        if (this.socket != null) {
+            delete this.socket;
+            this.Remove("socket");
+        }
+
+        if (this.headers != null) {
+            delete this.headers;
+            this.Remove("headers");
+        }
+
+        if (this.params != null) {
+            delete this.params;
+            this.Remove("params");
+        }
+
+        if (this.callbacks != null) {
+            delete this.callbacks;
+            this.Remove("callbacks");
+        }
     }
 }
 
@@ -268,19 +464,17 @@ stock int HTTPRequest_OnError(Handle socket, const int errorType, const int erro
         LogMessage("httpreq::HTTPRequest %d socket error: type %d, number %d", arg, errorType, errorNum);
     }
 
-    // callback
-    Call_StartFunction(INVALID_HANDLE, GetFunctionByName(INVALID_HANDLE, g_sResponseCallback[arg]));
-    Call_PushCell(false); // bool bSuccess
-    Call_PushCell(-1); // int iStatusCode
-    Call_PushCell(INVALID_HANDLE); // StringMap tHeaders
-    Call_PushString(""); // const char[] sBody
-    Call_PushCell(errorType); // int iErrorType
-    Call_PushCell(errorNum); // int iErrorNum
-    Call_PushCell(req.data); // any data
+    req.callbacks.Reset();
+    Call_StartFunction(null, req.callbacks.ReadFunction());
+    Call_PushCell(req);
+    Call_PushCell(false);
+    Call_PushCell(-1);
+    Call_PushCell(new FancyStringMap());
+    Call_PushString("");
+    Call_PushCell(errorType);
+    Call_PushCell(errorNum);
+    Call_PushCell(req.data);
     Call_Finish();
-
-    // cleanup
-    HTTPRequest_OnDisconnect(socket, arg);
 }
 
 stock int HTTPRequest_OnConnect(Handle socket, any arg)
@@ -290,7 +484,7 @@ stock int HTTPRequest_OnConnect(Handle socket, any arg)
         LogMessage("httpreq::HTTPRequest socket connected");
     }
 
-    req.connected = true;
+    req.SetValue("connected", true);
     if (req.ready) {
         req.SendRequest();
     }
@@ -303,46 +497,51 @@ stock int HTTPRequest_OnReceive(Handle socket, const char[] receiveData, const i
         LogMessage("httpreq::HTTPRequest socket received %d bytes:\n%s", dataSize, receiveData);
     }
 
-    char[][] sResponseStatus = new char[2][dataSize];
-    ExplodeString(receiveData, "\r\n", sResponseStatus, 2, dataSize, true); // strip status line from response body
+    // strip status line from response body
+    char[][] responseStatus = new char[2][dataSize];
+    ExplodeString(receiveData, "\r\n", responseStatus, 2, dataSize, true);
 
-    char sResponseStatusLine[2][128];
-    ExplodeString(sResponseStatus[0], " ", sResponseStatusLine, sizeof(sResponseStatusLine), sizeof(sResponseStatusLine[])); // strip status code from rest of line
-    int iStatusCode = StringToInt(sResponseStatusLine[1]);
-    
+    // strip status code from rest of line
+    char responseStatusLine[2][128];
+    ExplodeString(responseStatus[0], " ", responseStatusLine, sizeof(responseStatusLine), sizeof(responseStatusLine[]));
+    int statusCode = StringToInt(responseStatusLine[1]);
 
-    char[][] sResponseParts = new char[2][dataSize];
-    ExplodeString(sResponseStatus[1], "\r\n\r\n", sResponseParts, 2, dataSize, true); // strip status line from response body
+    // split headers from body
+    char[][] responseParts = new char[2][dataSize];
+    ExplodeString(responseStatus[1], "\r\n\r\n", responseParts, 2, dataSize, true);
 
     // get header count
-    int iHeaderAmount = 1;
-    for (int i = 0; i < strlen(sResponseParts[0]); ++i) {
-        if (sResponseParts[0][i] == '\r' && sResponseParts[0][i + 1] == '\n') {
-            iHeaderAmount++;
+    int headerCount = 1;
+    for (int i = 0; i < strlen(responseParts[0]); ++i) {
+        if (responseParts[0][i] == '\r' && responseParts[0][i + 1] == '\n') {
+            headerCount++;
             ++i;
         }
     }
 
-    StringMap tResponseHeaders = CreateTrie();
-    char[][] sHeaderLines = new char[iHeaderAmount][dataSize];
-    char[][] sHeaderLine = new char[2][dataSize];
-    ExplodeString(sResponseParts[0], "\r\n", sHeaderLines, iHeaderAmount, dataSize, false); // split headers by line
-    for (int i = 0; i < iHeaderAmount; ++i) {
-        ExplodeString(sHeaderLines[i], ":", sHeaderLine, 2, dataSize, true); // split on first colon
-        TrimString(sHeaderLine[0]);
-        TrimString(sHeaderLine[1]);
-        tResponseHeaders.SetString(sHeaderLine[0], sHeaderLine[1]);
+    // get headers
+    FancyStringMap headers = new FancyStringMap();
+    char[][] headerLines = new char[headerCount][dataSize];
+    char[][] headerLine = new char[2][dataSize];
+    ExplodeString(responseParts[0], "\r\n", headerLines, headerCount, dataSize, false);
+
+    for (int i = 0; i < headerCount; ++i) {
+        ExplodeString(headerLines[i], ": ", headerLine, 2, dataSize, true);
+        TrimString(headerLine[0]);
+        TrimString(headerLine[1]);
+        headers.SetString(headerLine[0], headerLine[1]);
     }
 
-    // callback
-    Call_StartFunction(INVALID_HANDLE, GetFunctionByName(INVALID_HANDLE, g_sResponseCallback[arg]));
-    Call_PushCell(true); // bool bSuccess
-    Call_PushCell(iStatusCode); // int iStatusCode
-    Call_PushCell(tResponseHeaders); // StringMap tHeaders
-    Call_PushString(sResponseParts[1]); // const char[] sBody
-    Call_PushCell(0); // int iErrorType
-    Call_PushCell(0); // int iErrorNum
-    Call_PushCell(req.data); // any data
+    req.callbacks.Reset();
+    Call_StartFunction(null, req.callbacks.ReadFunction());
+    Call_PushCell(req);
+    Call_PushCell(true);
+    Call_PushCell(statusCode);
+    Call_PushCell(headers);
+    Call_PushString(responseParts[1]);
+    Call_PushCell(0);
+    Call_PushCell(0);
+    Call_PushCell(req.data);
 
     return Call_Finish();
 }
@@ -353,18 +552,4 @@ stock int HTTPRequest_OnDisconnect(Handle socket, any arg)
     if (req.debug) {
         LogMessage("httpreq::HTTPRequest %d socket disconnected", arg);
     }
-
-    CloseHandle(socket);
-    g_hSockets[arg] = null;
-    req.headers.Clear();
-    CloseHandle(req.headers);
-    req.params.Clear();
-    CloseHandle(req.params);
-    strcopy(g_sMethod[arg], sizeof(g_sMethod[]), "");
-    strcopy(g_sURL[arg], sizeof(g_sURL[]), "");
-    strcopy(g_sResponseCallback[arg], sizeof(g_sResponseCallback[]), "");
-    req.connecting = false;
-    req.connected = false;
-    req.ready = false;
-    req.debug = false;
 }
