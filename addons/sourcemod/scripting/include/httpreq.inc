@@ -261,7 +261,7 @@ methodmap HTTPRequest
     }
 }
 
-public int HTTPRequest_OnError(Handle socket, const int errorType, const int errorNum, any arg)
+stock int HTTPRequest_OnError(Handle socket, const int errorType, const int errorNum, any arg)
 {
     HTTPRequest req = view_as<HTTPRequest>(arg);
     if (req.debug) {
@@ -283,7 +283,7 @@ public int HTTPRequest_OnError(Handle socket, const int errorType, const int err
     HTTPRequest_OnDisconnect(socket, arg);
 }
 
-public int HTTPRequest_OnConnect(Handle socket, any arg)
+stock int HTTPRequest_OnConnect(Handle socket, any arg)
 {
     HTTPRequest req = view_as<HTTPRequest>(arg);
     if (req.debug) {
@@ -296,7 +296,7 @@ public int HTTPRequest_OnConnect(Handle socket, any arg)
     }
 }
 
-public int HTTPRequest_OnReceive(Handle socket, const char[] receiveData, const int dataSize, any arg)
+stock int HTTPRequest_OnReceive(Handle socket, const char[] receiveData, const int dataSize, any arg)
 {
     HTTPRequest req = view_as<HTTPRequest>(arg);
     if (req.debug) {
@@ -347,7 +347,7 @@ public int HTTPRequest_OnReceive(Handle socket, const char[] receiveData, const 
     return Call_Finish();
 }
 
-public int HTTPRequest_OnDisconnect(Handle socket, any arg)
+stock int HTTPRequest_OnDisconnect(Handle socket, any arg)
 {
     HTTPRequest req = view_as<HTTPRequest>(arg);
     if (req.debug) {
