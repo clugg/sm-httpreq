@@ -171,7 +171,7 @@ methodmap HTTPRequest
         }
 
         if (this.debug) {
-            PrintToServer("httpreq::HTTPRequest %d socket connecting to %s:%d", this.index, sHost, iPort);
+            LogMessage("httpreq::HTTPRequest socket connecting to %s:%d", host, port);
         }
 
         SocketConnect(this.socket, HTTPRequest_OnConnect, HTTPRequest_OnReceive, HTTPRequest_OnDisconnect, sHost, iPort);
@@ -253,7 +253,7 @@ methodmap HTTPRequest
         StrCat(sRequest, sizeof(sRequest), "\r\n");
 
         if (this.debug) {
-            PrintToServer("httpreq::HTTPRequest %d socket making request:\n%s", this.index, sRequest);
+            LogMessage("httpreq::HTTPRequest socket making request:\n%s", request);
         }
 
         SocketSend(this.socket, sRequest);
@@ -265,7 +265,7 @@ public int HTTPRequest_OnError(Handle socket, const int errorType, const int err
 {
     HTTPRequest req = view_as<HTTPRequest>(arg);
     if (req.debug) {
-        PrintToServer("httpreq::HTTPRequest %d socket error: type %d, number %d", arg, errorType, errorNum);
+        LogMessage("httpreq::HTTPRequest %d socket error: type %d, number %d", arg, errorType, errorNum);
     }
 
     // callback
@@ -287,7 +287,7 @@ public int HTTPRequest_OnConnect(Handle socket, any arg)
 {
     HTTPRequest req = view_as<HTTPRequest>(arg);
     if (req.debug) {
-        PrintToServer("httpreq::HTTPRequest %d socket connected", arg);
+        LogMessage("httpreq::HTTPRequest socket connected");
     }
 
     req.connected = true;
@@ -300,7 +300,7 @@ public int HTTPRequest_OnReceive(Handle socket, const char[] receiveData, const 
 {
     HTTPRequest req = view_as<HTTPRequest>(arg);
     if (req.debug) {
-        PrintToServer("httpreq::HTTPRequest %d socket received %d bytes:\n%s", arg, dataSize, receiveData);
+        LogMessage("httpreq::HTTPRequest socket received %d bytes:\n%s", dataSize, receiveData);
     }
 
     char[][] sResponseStatus = new char[2][dataSize];
@@ -351,7 +351,7 @@ public int HTTPRequest_OnDisconnect(Handle socket, any arg)
 {
     HTTPRequest req = view_as<HTTPRequest>(arg);
     if (req.debug) {
-        PrintToServer("httpreq::HTTPRequest %d socket disconnected", arg);
+        LogMessage("httpreq::HTTPRequest %d socket disconnected", arg);
     }
 
     CloseHandle(socket);
