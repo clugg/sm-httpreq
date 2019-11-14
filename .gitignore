@@ -1,0 +1,5 @@
+*.exe
+*.smx
+
+addons/sourcemod/scripting/include/*.inc
+!addons/sourcemod/scripting/include/httpreq.inc
