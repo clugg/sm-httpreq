@@ -1,6 +1,6 @@
 # sm-httpreq
 
-**I would not recommend this for use in production. It does not support HTTPS and is therefore not secure. I consider this more of a learning/informative project. If you are a looking for a more fully featured HTTP requests library, I would recommend [SteamWorks](https://forums.alliedmods.net/showthread.php?t=229556).**
+**I would not recommend this for use in production. It does not support HTTPS and is therefore not secure. I consider this more of a learning/informative project. If you are looking for a more fully featured HTTP requests library, I would recommend [SteamWorks](https://forums.alliedmods.net/showthread.php?t=229556).**
 
 Provides the ability to make simple HTTP requests via the Socket extension in SourcePawn.
 
